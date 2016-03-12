@@ -2,23 +2,22 @@ if (typeof AudioMidiJS === 'undefined') {
     // the variable is defined
 	var AudioMidiJS = {
 		audioCtx : new (window.AudioContext || window.webkitAudioContext)(),
+		audioPlaying : false,
 		analyser : null,
+		currentNote : null,
+		minimumDuration : 300,
+		midiEvents : [],
 		notes : ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
 		notesData : [],
 		noteOn : false,
-		currentNote : null,
-		timers : [],
 		sourceElement : null,
-		audioPlaying : false,
-		minimumDuration : 300,
-		midiEvents : [],
-		init : function () {
-			var self = this;
-			//this.canvasCtx = document.querySelector('canvas').getContext("2d");
+		timers : [],
+		init : function (sourceElement) {
+			var scope = this;
+			this.sourceElement = sourceElement;
 
 			this.analyser = this.audioCtx.createAnalyser();
-			var audioElement = document.querySelector('audio');
-			var source = this.audioCtx.createMediaElementSource(audioElement);
+			var source = this.audioCtx.createMediaElementSource(this.sourceElement);
 			source.connect(this.analyser);
 
 			this.analyser.connect(this.audioCtx.destination);
@@ -27,23 +26,21 @@ if (typeof AudioMidiJS === 'undefined') {
 
 			this.dataArray = new Uint8Array(this.bufferLength);
 			this.frequencies = new Float32Array(this.bufferLength);
-			this.buildNotesData(5);
+			this.buildNotesData(5); // 5 octaves worth
 
-			audioElement.addEventListener('ended', function() {
-				self.audioPlaying = false;
+			this.sourceElement.addEventListener('ended', function() {
+				scope.audioPlaying = false;
 
 				//** JSMIDI **//
 				// Write MIDI
 				var noteEvents = [];
-				self.midiEvents.map(function (element) {
+				scope.midiEvents.map(function (element) {
 					//console.log({pitch: element.note + element.octave, duration: element.duration});
 					//return element.note + element.octave;
 					return {pitch: element.note + element.octave, duration: element.duration/5};
 				}).forEach(function(note) {
-					//console.log(note);
 				    Array.prototype.push.apply(noteEvents, MidiEvent.createNote(note));
 				});
-				//console.log(noteEvents);
 
 				// Create a track that contains the events to play the notes above
 				var track = new MidiTrack({ events: noteEvents });
@@ -65,18 +62,15 @@ if (typeof AudioMidiJS === 'undefined') {
 				//song.save();
 			}, true);
 
-			audioElement.addEventListener('play', function() {
-				self.startTimer(1);
+			this.sourceElement.addEventListener('play', function() {
+				scope.startTimer(1);
 				this.midiEvents = [];
-				self.currentNote = null;
-				self.audioPlaying = true;
-				self.capture();
+				scope.currentNote = null;
+				scope.audioPlaying = true;
+				scope.capture();
 			}, true);
 
 			return this;
-		},
-		setSource : function (sourceElement) {
-			this.sourceElement = sourceElement;
 		},
 		//https://github.com/fritzvd/signaltohertz
 		calculateHertz : function (frequencies, options) {
@@ -164,6 +158,10 @@ if (typeof AudioMidiJS === 'undefined') {
 			this.octave = params.octave;
 			this.duration = params.duration;
 		},
+		newMidiEvent : function(event) {
+			this.onMidiEvent();
+			this.midiEvents.push(new this.midiEvent(event));
+		},
 		capture : function () {
 			if (true || this.audioPlaying) {
 				this.animationFrame = requestAnimationFrame(this.capture.bind(this));
@@ -175,24 +173,6 @@ if (typeof AudioMidiJS === 'undefined') {
 			this.analyser.getFloatFrequencyData(this.frequencies);
 			this.analyser.getByteTimeDomainData(this.dataArray);
 			frequency = this.calculateHertz(this.frequencies);
-
-			/*
-			this.canvasCtx.fillStyle = 'rgb(0, 400, 0)';
-			this.canvasCtx.fillRect(0, 0, 500, 500);
-
-			var barWidth = (100 / this.bufferLength) * 2.5;
-			var barHeight;
-			var x = 0;
-
-			for(var i = 0; i < this.bufferLength; i++) {
-				barHeight = this.dataArray[i];
-
-				this.canvasCtx.fillStyle = 'rgb(' + (barHeight+100) + ',60,60)';
-				this.canvasCtx.fillRect(x,150-barHeight/2,barWidth,barHeight/2);
-
-				x += barWidth + 1;
-			}
-			*/
 
 			// Need to wait for minimum note duration
 			if (this.dataArray[0] == 128) {
@@ -214,8 +194,7 @@ if (typeof AudioMidiJS === 'undefined') {
 					var duration = this.getCurrentDuration(2);
 					this.startTimer(2);
 				
-					this.onMidiEvent();
-					this.midiEvents.push(new this.midiEvent({note:note.note, octave:note.octave, duration:duration}));				
+					this.newMidiEvent({note:note.note, octave:note.octave, duration:duration});
 				}
 				
 				this.currentNote = note;
@@ -227,23 +206,17 @@ if (typeof AudioMidiJS === 'undefined') {
 
 			this.whileCapture(this);
 		},
-		// Events
+		// Exposed events
 		whileCapture : function(ref) {
-			//console.log(ref.dataArray[0]);
 		},
 		whileNoteOn : function(ref) {
-			document.getElementById('frequency').innerHTML = ref.currentNote.note;
 		},
 		whileNoteOff : function() {
-			document.getElementById('frequency').innerHTML = '-';
 		},
 		onMidiEvent : function() {
-
 		}
 
 	};
-
-	AudioMidiJS.init();
 
 } else {
 	console.warn('AudioMidiJS already defined');

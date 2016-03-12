@@ -11,11 +11,13 @@
 		<h1>AudioMidiJS</h1>
 		<p>Press play to bounce audio to MIDI.</p>
 		<p style="font-size:60px;" id="frequency"></p>
-		<audio controls>
-			<source src="audio/Bb_minor_scale.mp3" />	
-		</audio>
-		<a id="midi-play" href="javascript:;">Play MIDI</a>
-		<!--<canvas style="width:500px;height:500px;"></canvas>-->
+		<div>
+			<audio controls>
+				<source src="audio/Bb_minor_scale.mp3" />	
+			</audio>
+			<a id="midi-play" href="javascript:;">Play MIDI</a>
+		</div>
+		<canvas style="width:500px;height:500px;"></canvas>
 		<p><a href="https://github.com/grimmdude/AudioMidiJS">Garrett Grimm</a></p>
 		<script type="text/javascript" src="js/jsmidi.js"></script>
 		<script src="js/jasmid/stream.js"></script>
@@ -25,6 +27,35 @@
 		<script src="js/jasmid/audio.js"></script>
 		<script type="text/javascript" src="js/audio-midi-js.js"></script>
 		<script type="text/javascript">
+			AudioMidiJS.init(document.querySelector('audio'));
+			AudioMidiJS.whileNoteOn = function(ref) {
+				document.getElementById('frequency').innerHTML = ref.currentNote.note;
+			};
+
+			AudioMidiJS.whileNoteOff = function() {
+				document.getElementById('frequency').innerHTML = '-';
+			};
+
+			var canvasCtx = document.querySelector('canvas').getContext("2d");
+
+			AudioMidiJS.whileCapture = function(ref) {
+				canvasCtx.fillStyle = 'rgb(0, 400, 0)';
+				canvasCtx.fillRect(0, 0, 500, 500);
+
+				var barWidth = (100 / ref.bufferLength) * 2.5;
+				var barHeight;
+				var x = 0;
+
+				for(var i = 0; i < ref.bufferLength; i++) {
+					barHeight = ref.dataArray[i];
+
+					canvasCtx.fillStyle = 'rgb(' + (barHeight+100) + ',60,60)';
+					canvasCtx.fillRect(x,150-barHeight/2,barWidth,barHeight/2);
+
+					x += barWidth + 1;
+				}
+			}
+
 			function loadRemote(path, callback) {
 				var fetch = new XMLHttpRequest();
 				fetch.open('GET', path);
