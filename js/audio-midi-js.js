@@ -2,20 +2,23 @@ if (typeof AudioMidiJS === 'undefined') {
     // the variable is defined
 	var AudioMidiJS = {
 		audioCtx : new (window.AudioContext || window.webkitAudioContext)(),
+		analyser : null,
 		notes : ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
-		bounceData : [],
+		notesData : [],
 		noteOn : false,
 		currentNote : null,
-		timer : 0,
+		timers : [],
+		sourceElement : null,
 		audioPlaying : false,
 		minimumDuration : 300,
+		midiEvents : [],
 		init : function () {
 			var self = this;
 			//this.canvasCtx = document.querySelector('canvas').getContext("2d");
 
 			this.analyser = this.audioCtx.createAnalyser();
 			var audioElement = document.querySelector('audio');
-			source = this.audioCtx.createMediaElementSource(audioElement);
+			var source = this.audioCtx.createMediaElementSource(audioElement);
 			source.connect(this.analyser);
 
 			this.analyser.connect(this.audioCtx.destination);
@@ -24,8 +27,7 @@ if (typeof AudioMidiJS === 'undefined') {
 
 			this.dataArray = new Uint8Array(this.bufferLength);
 			this.frequencies = new Float32Array(this.bufferLength);
-			this.noteArray = this.buildNoteArray(5);
-
+			this.buildNotesData(5);
 
 			audioElement.addEventListener('ended', function() {
 				self.audioPlaying = false;
@@ -33,10 +35,10 @@ if (typeof AudioMidiJS === 'undefined') {
 				//** JSMIDI **//
 				// Write MIDI
 				var noteEvents = [];
-				self.bounceData.map(function (element) {
+				self.midiEvents.map(function (element) {
 					//console.log({pitch: element.note + element.octave, duration: element.duration});
-					return element.note + element.octave;
-					return {pitch: element.note + element.octave, duration: element.duration/3};
+					//return element.note + element.octave;
+					return {pitch: element.note + element.octave, duration: element.duration/5};
 				}).forEach(function(note) {
 					//console.log(note);
 				    Array.prototype.push.apply(noteEvents, MidiEvent.createNote(note));
@@ -64,14 +66,17 @@ if (typeof AudioMidiJS === 'undefined') {
 			}, true);
 
 			audioElement.addEventListener('play', function() {
-				self.startTimer();
-				self.resetBounceData();
+				self.startTimer(1);
+				this.midiEvents = [];
 				self.currentNote = null;
 				self.audioPlaying = true;
-				self.run();
+				self.capture();
 			}, true);
 
 			return this;
+		},
+		setSource : function (sourceElement) {
+			this.sourceElement = sourceElement;
 		},
 		//https://github.com/fritzvd/signaltohertz
 		calculateHertz : function (frequencies, options) {
@@ -108,22 +113,20 @@ if (typeof AudioMidiJS === 'undefined') {
 			return hertz;
 		},
 		// Build object of notes and frequencies [{note: 'A', octave: 1, frequency : 440}]
-		buildNoteArray : function (octaves) {
-			var noteObject = [];
-
+		buildNotesData : function (octaves) {
 			for (var i = 1; i <= octaves; i++) {
 				for (var j in this.notes) {
-					noteObject.push({
+					this.notesData.push(new this.note({
 										note: this.notes[j],
 										octave: i,
 										frequency: this.getFrequencyByNote(this.notes[j], i)
-									});
+									}));
 				}
 			}
 
 			// default this.currentNote
-			this.currentNote = noteObject[0];
-			return noteObject;
+			this.currentNote = this.notesData[0];
+			return this;
 		},
 		// Match frequency to closest note
 		matchNoteToFrequency : function (frequency) {
@@ -131,13 +134,13 @@ if (typeof AudioMidiJS === 'undefined') {
 			var diff = 0;
 			var lastDiff = 0; // Keep track of diff so if it's getting bigger we can break the loop.
 
-			for (var i in this.noteArray) {
-				if (Math.abs(this.noteArray[i].frequency - frequency) < Math.abs(this.noteArray[closestMatch].frequency - frequency)) {
+			for (var i in this.notesData) {
+				if (Math.abs(this.notesData[i].frequency - frequency) < Math.abs(this.notesData[closestMatch].frequency - frequency)) {
 					closestMatch = i;
 				}
 			}
 
-			return this.noteArray[closestMatch];
+			return this.notesData[closestMatch];
 		},
 		isNewNote : function(note) {
 			if (this.currentNote && note && this.currentNote.note != note.note) {
@@ -145,18 +148,25 @@ if (typeof AudioMidiJS === 'undefined') {
 			}
 			return false;
 		},
-		startTimer : function() {
-			this.timer = new Date().getTime()
+		startTimer : function(timerNumber) {
+			this.timers[timerNumber] = new Date().getTime()
 		},
-		getCurrentDuration : function() {
-			return new Date().getTime() - this.timer;
+		getCurrentDuration : function(timerNumber) {
+			return new Date().getTime() - this.timers[timerNumber];
 		},
-		resetBounceData : function() {
-			this.bounceData = [];
+		note : function(params) {
+			this.note = params.note;
+			this.octave = params.octave;
+			this.frequency = params.frequency;
 		},
-		run : function () {
+		midiEvent : function(params) {
+			this.note = params.note;
+			this.octave = params.octave;
+			this.duration = params.duration;
+		},
+		capture : function () {
 			if (true || this.audioPlaying) {
-				this.animationFrame = requestAnimationFrame(this.run.bind(this));
+				this.animationFrame = requestAnimationFrame(this.capture.bind(this));
 
 			} else {
 				cancelAnimationFrame(this.animationFrame);
@@ -190,28 +200,45 @@ if (typeof AudioMidiJS === 'undefined') {
 
 			} else {
 				this.noteOn = true;
-				if (this.getCurrentDuration() > this.minimumDuration) {
-					this.startTimer();
+				
+				if (this.getCurrentDuration(1) > this.minimumDuration) {
+					this.startTimer(1);
 				}		
 			}
 
-			if (this.noteOn || this.getCurrentDuration() < this.minimumDuration) {
+			if (this.noteOn || this.getCurrentDuration(1) < this.minimumDuration) {
+				//console.log(this.getCurrentDuration(1));
 				note = this.matchNoteToFrequency(frequency);
 
 				if (this.isNewNote(note)) {
-					var duration = this.getCurrentDuration();
-					//console.log(duration);
-					this.bounceData.push({note:note.note, octave:note.octave, duration:duration});					
+					var duration = this.getCurrentDuration(2);
+					this.startTimer(2);
+				
+					this.onMidiEvent();
+					this.midiEvents.push(new this.midiEvent({note:note.note, octave:note.octave, duration:duration}));				
 				}
 				
 				this.currentNote = note;
-				//document.getElementById('frequency').innerHTML = JSON.stringify(this.currentNote) + ' diff: ' + (this.currentNote.frequency - frequency);
-				document.getElementById('frequency').innerHTML = this.currentNote.note;
-
+				this.whileNoteOn(this);
 			} else {
 				this.currentNote = null;
-				document.getElementById('frequency').innerHTML = '-';
+				this.whileNoteOff(this);
 			}
+
+			this.whileCapture(this);
+		},
+		// Events
+		whileCapture : function(ref) {
+			//console.log(ref.dataArray[0]);
+		},
+		whileNoteOn : function(ref) {
+			document.getElementById('frequency').innerHTML = ref.currentNote.note;
+		},
+		whileNoteOff : function() {
+			document.getElementById('frequency').innerHTML = '-';
+		},
+		onMidiEvent : function() {
+
 		}
 
 	};
