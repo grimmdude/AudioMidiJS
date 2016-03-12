@@ -264,6 +264,9 @@ MidiEvent.createNote = function(note, sustained) {
         throw new Error("The pitch is required in order to create a note.");
     }
 
+    // gg added.  Apparently pitch needs to be one of the binary values in noteTable
+    note.pitch = noteTable[note.pitch];
+
     var events = [];
     events.push(MidiEvent.noteOn(note));
 

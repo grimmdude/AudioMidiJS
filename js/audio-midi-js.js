@@ -4,12 +4,14 @@ if (typeof AudioMidiJS === 'undefined') {
 		audioCtx : new (window.AudioContext || window.webkitAudioContext)(),
 		notes : ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
 		bounceData : [],
+		noteOn : false,
 		currentNote : null,
 		timer : 0,
-		audioPlaying : true,
+		audioPlaying : false,
+		minimumDuration : 300,
 		init : function () {
 			var self = this;
-			this.canvasCtx = document.querySelector('canvas').getContext("2d");
+			//this.canvasCtx = document.querySelector('canvas').getContext("2d");
 
 			this.analyser = this.audioCtx.createAnalyser();
 			var audioElement = document.querySelector('audio');
@@ -22,10 +24,14 @@ if (typeof AudioMidiJS === 'undefined') {
 				// Write MIDI
 				var noteEvents = [];
 				self.bounceData.map(function (element) {
+					//console.log({pitch: element.note + element.octave, duration: element.duration});
 					return element.note + element.octave;
+					return {pitch: element.note + element.octave, duration: element.duration/3};
 				}).forEach(function(note) {
+					//console.log(note);
 				    Array.prototype.push.apply(noteEvents, MidiEvent.createNote(note));
 				});
+				//console.log(noteEvents);
 
 				// Create a track that contains the events to play the notes above
 				var track = new MidiTrack({ events: noteEvents });
@@ -47,6 +53,7 @@ if (typeof AudioMidiJS === 'undefined') {
 			}, true);
 
 			audioElement.addEventListener('play', function() {
+				self.startTimer();
 				self.resetBounceData();
 				self.currentNote = null;
 				self.audioPlaying = true;
@@ -60,7 +67,6 @@ if (typeof AudioMidiJS === 'undefined') {
 			this.dataArray = new Uint8Array(this.bufferLength);
 			this.frequencies = new Float32Array(this.bufferLength);
 			this.noteArray = this.buildNoteArray(5);
-			this.run();
 
 			return this;
 		},
@@ -84,6 +90,7 @@ if (typeof AudioMidiJS === 'undefined') {
 					maxI = i;
 				} 
 			}
+
 			return maxI * rate;
 		},
 		// http://www.phy.mtu.edu/~suits/NoteFreqCalcs.html
@@ -130,25 +137,22 @@ if (typeof AudioMidiJS === 'undefined') {
 			return this.noteArray[closestMatch];
 		},
 		isNewNote : function(note) {
-			if (this.currentNote && this.currentNote.note != note.note) {
+			if (this.currentNote && note && this.currentNote.note != note.note) {
 				return true;
 			}
 			return false;
 		},
-		isRest : function(frequency) {
-
-		},
 		startTimer : function() {
 			this.timer = new Date().getTime()
 		},
-		stopTimer : function() {
+		getCurrentDuration : function() {
 			return new Date().getTime() - this.timer;
 		},
 		resetBounceData : function() {
 			this.bounceData = [];
 		},
 		run : function () {
-			if (this.audioPlaying) {
+			if (true || this.audioPlaying) {
 				this.animationFrame = requestAnimationFrame(this.run.bind(this));
 
 			} else {
@@ -159,6 +163,7 @@ if (typeof AudioMidiJS === 'undefined') {
 			this.analyser.getByteTimeDomainData(this.dataArray);
 			frequency = this.calculateHertz(this.frequencies);
 
+			/*
 			this.canvasCtx.fillStyle = 'rgb(0, 400, 0)';
 			this.canvasCtx.fillRect(0, 0, 500, 500);
 
@@ -174,22 +179,38 @@ if (typeof AudioMidiJS === 'undefined') {
 
 				x += barWidth + 1;
 			}
+			*/
 
-			note = this.matchNoteToFrequency(frequency);
+			// Need to wait for minimum note duration
+			if (this.dataArray[0] > 127 && this.dataArray[0] < 129) {
+				this.noteOn = false;
 
-			if (this.isNewNote(note)) {
-				this.bounceData.push(note);
-				console.log(note);
+			} else {
+				this.noteOn = true;
+				if (this.getCurrentDuration() > this.minimumDuration) {
+					this.startTimer();
+				}		
 			}
 
-			if (this.dataArray[0] == 128) {
-				// This is no audio.
-				//console.log('rest');
+			if (this.noteOn || this.getCurrentDuration() < this.minimumDuration) {
+				note = this.matchNoteToFrequency(frequency);
+
+				if (this.isNewNote(note)) {
+					var duration = this.getCurrentDuration();
+
+					//if (duration > this.minimumDuration) {
+						this.bounceData.push({note:note.note, octave:note.octave, duration:duration});
+					//}
+					
+				}
+				
+				this.currentNote = note;
+				document.getElementById('frequency').innerHTML = JSON.stringify(this.currentNote) + ' diff: ' + (this.currentNote.frequency - frequency);
+
+			} else {
+				this.currentNote = null;
+				document.getElementById('frequency').innerHTML = 'null';
 			}
-			
-			this.currentNote = note;
-			
-			document.getElementById('frequency').innerHTML = JSON.stringify(this.currentNote) + ' diff: ' + (this.currentNote.frequency - frequency);	
 		}
 
 	};
