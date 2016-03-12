@@ -17,6 +17,16 @@ if (typeof AudioMidiJS === 'undefined') {
 			var audioElement = document.querySelector('audio');
 			source = this.audioCtx.createMediaElementSource(audioElement);
 			source.connect(this.analyser);
+
+			this.analyser.connect(this.audioCtx.destination);
+			this.analyser.fftSize = 2048;
+			this.bufferLength = this.analyser.frequencyBinCount;
+
+			this.dataArray = new Uint8Array(this.bufferLength);
+			this.frequencies = new Float32Array(this.bufferLength);
+			this.noteArray = this.buildNoteArray(5);
+
+
 			audioElement.addEventListener('ended', function() {
 				self.audioPlaying = false;
 
@@ -35,6 +45,7 @@ if (typeof AudioMidiJS === 'undefined') {
 
 				// Create a track that contains the events to play the notes above
 				var track = new MidiTrack({ events: noteEvents });
+				track.setTempo(10);
 
 				// Creates an object that contains the final MIDI track in base64 and some
 				// useful methods.
@@ -59,14 +70,6 @@ if (typeof AudioMidiJS === 'undefined') {
 				self.audioPlaying = true;
 				self.run();
 			}, true);
-
-			this.analyser.connect(this.audioCtx.destination);
-			this.analyser.fftSize = 2048;
-			this.bufferLength = this.analyser.frequencyBinCount;
-
-			this.dataArray = new Uint8Array(this.bufferLength);
-			this.frequencies = new Float32Array(this.bufferLength);
-			this.noteArray = this.buildNoteArray(5);
 
 			return this;
 		},
@@ -182,7 +185,7 @@ if (typeof AudioMidiJS === 'undefined') {
 			*/
 
 			// Need to wait for minimum note duration
-			if (this.dataArray[0] > 127 && this.dataArray[0] < 129) {
+			if (this.dataArray[0] == 128) {
 				this.noteOn = false;
 
 			} else {
@@ -197,19 +200,17 @@ if (typeof AudioMidiJS === 'undefined') {
 
 				if (this.isNewNote(note)) {
 					var duration = this.getCurrentDuration();
-
-					//if (duration > this.minimumDuration) {
-						this.bounceData.push({note:note.note, octave:note.octave, duration:duration});
-					//}
-					
+					//console.log(duration);
+					this.bounceData.push({note:note.note, octave:note.octave, duration:duration});					
 				}
 				
 				this.currentNote = note;
-				document.getElementById('frequency').innerHTML = JSON.stringify(this.currentNote) + ' diff: ' + (this.currentNote.frequency - frequency);
+				//document.getElementById('frequency').innerHTML = JSON.stringify(this.currentNote) + ' diff: ' + (this.currentNote.frequency - frequency);
+				document.getElementById('frequency').innerHTML = this.currentNote.note;
 
 			} else {
 				this.currentNote = null;
-				document.getElementById('frequency').innerHTML = 'null';
+				document.getElementById('frequency').innerHTML = '-';
 			}
 		}
 
