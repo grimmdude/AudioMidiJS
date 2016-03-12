@@ -35,14 +35,15 @@ if (typeof AudioMidiJS === 'undefined') {
 				var song  = MidiWriter({ tracks: [track] });
 
 				// Alert the base64 representation of the MIDI file
-				console.log(song.b64);
+				//console.log(song.b64);
 
+				document.getElementById('midi-play').href = "javascript:void(play('data:audio/midi;base64," + song.b64 + "'));";
 				// Play the song
 				//song.play();
 
 				// Play/save the song (depending of MIDI plugins in the browser). It opens
 				// a new window and loads the generated MIDI file with the proper MIME type
-				song.save();
+				//song.save();
 			}, true);
 
 			audioElement.addEventListener('play', function() {
